@@ -493,6 +493,36 @@
     color: var(--red);
   }
 
+  .badge-paid {
+    display: inline-block;
+    padding: 1px 6px;
+    background: var(--green-dim);
+    border: 1px solid var(--green);
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--green);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  .badge-unpaid {
+    display: inline-block;
+    padding: 1px 6px;
+    background: var(--red-dim);
+    border: 1px solid #ff525250;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--red);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
   /* Responsive */
   @media (max-width: 480px) {
     .container { padding: 12px; }
@@ -619,6 +649,7 @@ function loadData() {
     currentWeek: 2,
     buyIn: 5,
     weeks: {},      // { [weekNum]: { picks: [], result: null, payout: 0 } }
+    paidPlayers: ['Herlihy','Kirstein','Schwartz'], // who has paid their $85
     adminPin: '1234',
   };
 }
@@ -826,7 +857,7 @@ function PicksTab({ data, update, weekData }) {
           <div className="card-title" style={{color:'var(--red)'}}>⚠️ Missing Picks</div>
           <div>
             {data.players.filter(p => !alreadyPicked.includes(p)).map(p => (
-              <span className="missing-tag" key={p}>{p}</span>
+              <span className="missing-tag" key={p}>{p}{!(data.paidPlayers || []).includes(p) && <span style={{fontSize:9,marginLeft:4,opacity:0.7}}>unpaid</span>}</span>
             ))}
           </div>
         </div>
@@ -1289,6 +1320,38 @@ function AdminTab({ data, update }) {
           )}
         </div>
         {msg && <div className="success-banner" style={{marginTop:8}}>✅ {msg}</div>}
+      </div>
+
+      {/* Payment Tracker */}
+      <div className="card">
+        <div className="card-title">💵 Payment Tracker ($85/person)</div>
+        <div style={{fontSize:12,color:'var(--text2)',marginBottom:10}}>
+          {(data.paidPlayers || []).length}/{data.players.length} paid • ${(data.paidPlayers || []).length * 85} collected of ${data.players.length * 85}
+        </div>
+        {data.players.map((name, i) => {
+          const isPaid = (data.paidPlayers || []).includes(name);
+          return (
+            <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <div className="pick-avatar" style={{background: AVATAR_COLORS[i % AVATAR_COLORS.length] + '30', color: AVATAR_COLORS[i % AVATAR_COLORS.length], width:28,height:28,fontSize:11}}>
+                  {getInitials(name)}
+                </div>
+                <span style={{fontWeight:600,fontSize:14}}>{name}</span>
+                {isPaid && <span className="badge-paid">PAID</span>}
+              </div>
+              <button className={`btn btn-small ${isPaid ? 'btn-red' : 'btn-green'}`} style={{padding:'4px 12px',fontSize:11}} onClick={() => {
+                update(d => {
+                  if (!d.paidPlayers) d.paidPlayers = [];
+                  if (isPaid) {
+                    d.paidPlayers = d.paidPlayers.filter(p => p !== name);
+                  } else {
+                    d.paidPlayers.push(name);
+                  }
+                });
+              }}>{isPaid ? 'Undo' : 'Mark Paid'}</button>
+            </div>
+          );
+        })}
       </div>
 
       {/* Grade Picks */}
