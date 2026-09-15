@@ -1101,56 +1101,60 @@ function DashboardTab({ data }) {
 
 // ─── LEADERBOARD TAB ──────────────────────────────────────────
 function LeaderboardTab({ data }) {
+  const BET_SIZE = 5; // $5 per pick per week
+
   const playerStats = data.players.map(player => {
-    let wins = 0, losses = 0, currentStreak = 0, bestStreak = 0, worstStreak = 0, streak = 0, streakType = '';
+    let wins = 0, losses = 0, totalWagered = 0, totalReturned = 0;
+    let currentStreak = 0, streak = 0, streakType = '';
+    let bestHit = 0; // biggest single-pick payout
 
     Object.keys(data.weeks).sort((a,b) => a - b).forEach(w => {
       const pick = (data.weeks[w].picks || []).find(p => p.player === player);
       if (pick && pick.result !== 'pending') {
+        totalWagered += BET_SIZE;
         if (pick.result === 'won') {
           wins++;
+          const payout = BET_SIZE * americanToDecimal(pick.odds);
+          totalReturned += payout;
+          bestHit = Math.max(bestHit, payout);
           if (streakType === 'W') { streak++; }
           else { streak = 1; streakType = 'W'; }
-          bestStreak = Math.max(bestStreak, streak);
         } else {
           losses++;
+          // $0 returned on a loss
           if (streakType === 'L') { streak++; }
           else { streak = 1; streakType = 'L'; }
-          worstStreak = Math.max(worstStreak, streak);
         }
         currentStreak = streak;
       }
     });
 
     const total = wins + losses;
-    const pct = total > 0 ? (wins / total * 100) : 0;
-    return { player, wins, losses, total, pct, currentStreak, streakType, bestStreak, worstStreak };
+    const profit = totalReturned - totalWagered;
+    const roi = totalWagered > 0 ? (profit / totalWagered * 100) : 0;
+    return { player, wins, losses, total, totalWagered, totalReturned, profit, roi, bestHit, currentStreak, streakType };
   });
 
-  playerStats.sort((a, b) => b.pct - a.pct || b.wins - a.wins);
+  // Sort by profit (total earnings), then by ROI as tiebreaker
+  playerStats.sort((a, b) => b.profit - a.profit || b.roi - a.roi);
 
-  const hottest = [...playerStats].filter(p => p.total > 0).sort((a,b) => {
-    if (b.streakType === 'W' && a.streakType !== 'W') return 1;
-    if (a.streakType === 'W' && b.streakType !== 'W') return -1;
-    if (a.streakType === 'W' && b.streakType === 'W') return b.currentStreak - a.currentStreak;
-    return a.currentStreak - b.currentStreak;
-  });
+  // Find who has played at least one week
+  const activePlayers = playerStats.filter(p => p.total > 0);
 
-  const coldest = [...playerStats].filter(p => p.total > 0).sort((a,b) => {
-    if (b.streakType === 'L' && a.streakType !== 'L') return 1;
-    if (a.streakType === 'L' && b.streakType !== 'L') return -1;
-    if (a.streakType === 'L' && b.streakType === 'L') return b.currentStreak - a.currentStreak;
-    return a.currentStreak - b.currentStreak;
-  });
+  const hottest = [...playerStats].filter(p => p.total > 0 && p.streakType === 'W')
+    .sort((a,b) => b.currentStreak - a.currentStreak);
+
+  const coldest = [...playerStats].filter(p => p.total > 0 && p.streakType === 'L')
+    .sort((a,b) => b.currentStreak - a.currentStreak);
 
   return (
     <div>
       {/* Hot / Cold */}
-      {playerStats.some(p => p.total > 0) && (
+      {activePlayers.length > 0 && (
         <div className="stat-row">
           <div className="stat-box" style={{textAlign:'left'}}>
             <div className="stat-label">🔥 Who's Hot</div>
-            {hottest.length > 0 && hottest[0].streakType === 'W' ? (
+            {hottest.length > 0 ? (
               <div style={{marginTop:4}}>
                 <span style={{fontWeight:700,fontSize:14}}>{hottest[0].player}</span>
                 <span className="badge-hot" style={{marginLeft:6}}>{hottest[0].currentStreak}W streak</span>
@@ -1161,7 +1165,7 @@ function LeaderboardTab({ data }) {
           </div>
           <div className="stat-box" style={{textAlign:'left'}}>
             <div className="stat-label">🧊 Who Sucked</div>
-            {coldest.length > 0 && coldest[0].streakType === 'L' ? (
+            {coldest.length > 0 ? (
               <div style={{marginTop:4}}>
                 <span style={{fontWeight:700,fontSize:14}}>{coldest[0].player}</span>
                 <span className="badge-cold" style={{marginLeft:6}}>{coldest[0].currentStreak}L streak</span>
@@ -1175,24 +1179,32 @@ function LeaderboardTab({ data }) {
 
       <div className="card">
         <div className="card-title">🏆 Leaderboard</div>
+        <div style={{fontSize:11,color:'var(--text2)',marginBottom:10}}>
+          Ranked by earnings — each pick is a $5 bet at your odds. Win = $5 × odds payout. Loss = $0.
+        </div>
         {playerStats.map((p, i) => {
           const isFirst = i === 0 && p.total > 0;
-          const isLast = i === playerStats.length - 1 && p.total > 0 && playerStats.filter(x => x.total > 0).length > 1;
+          const isLast = i === playerStats.length - 1 && p.total > 0 && activePlayers.length > 1;
           return (
           <div className="lb-row" key={p.player} style={isFirst ? {background:'var(--green-dim)',borderRadius:8,padding:'10px 8px'} : isLast ? {background:'var(--red-dim)',borderRadius:8,padding:'10px 8px'} : {}}>
             <div className={`lb-rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'normal'}`}>
               {i + 1}
             </div>
-            <div className="lb-name">
-              {p.player}
-              {isFirst && <span className="badge-hot" style={{marginLeft:6,fontSize:10}}>+$100</span>}
-              {isLast && <span className="badge-cold" style={{marginLeft:6,fontSize:10}}>owes $100</span>}
-              {p.currentStreak >= 3 && p.streakType === 'W' && <span className="badge-hot" style={{marginLeft:6,fontSize:10}}>🔥 {p.currentStreak}W</span>}
-              {p.currentStreak >= 3 && p.streakType === 'L' && <span className="badge-cold" style={{marginLeft:6,fontSize:10}}>🧊 {p.currentStreak}L</span>}
+            <div className="lb-name" style={{minWidth:0}}>
+              <div>
+                {p.player}
+                {isFirst && <span className="badge-hot" style={{marginLeft:6,fontSize:10}}>+$100</span>}
+                {isLast && <span className="badge-cold" style={{marginLeft:6,fontSize:10}}>owes $100</span>}
+                {p.currentStreak >= 3 && p.streakType === 'W' && <span className="badge-hot" style={{marginLeft:6,fontSize:10}}>🔥 {p.currentStreak}W</span>}
+                {p.currentStreak >= 3 && p.streakType === 'L' && <span className="badge-cold" style={{marginLeft:6,fontSize:10}}>🧊 {p.currentStreak}L</span>}
+              </div>
+              <div style={{fontSize:11,color:'var(--text2)'}}>{p.wins}-{p.losses} • ${p.totalWagered} bet → ${p.totalReturned.toFixed(2)} back</div>
             </div>
-            <div className="lb-record">{p.wins}-{p.losses}</div>
-            <div className={`lb-pct ${p.pct >= 60 ? 'green' : p.pct < 40 && p.total > 0 ? 'red' : ''}`} style={{color: p.total === 0 ? 'var(--text2)' : undefined}}>
-              {p.total > 0 ? `${Math.round(p.pct)}%` : '—'}
+            <div style={{textAlign:'right',flexShrink:0}}>
+              <div className={`lb-pct ${p.profit > 0 ? 'green' : p.profit < 0 && p.total > 0 ? 'red' : ''}`} style={{color: p.total === 0 ? 'var(--text2)' : undefined, width:'auto'}}>
+                {p.total > 0 ? `${p.profit >= 0 ? '+' : ''}$${p.profit.toFixed(2)}` : '—'}
+              </div>
+              {p.total > 0 && <div style={{fontSize:10,color:'var(--text2)'}}>{p.roi >= 0 ? '+' : ''}{Math.round(p.roi)}% ROI</div>}
             </div>
           </div>
           );
