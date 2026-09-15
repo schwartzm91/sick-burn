@@ -793,6 +793,7 @@ function PicksTab({ data, update, weekData }) {
                 <div className="pick-player">{p.player}</div>
                 <div className="pick-detail">{p.game} • {p.betType}</div>
                 <div className="pick-detail" style={{color:'var(--text)', fontWeight:600}}>{p.pickText}</div>
+                {p.commishNote && <div style={{fontSize:11,color:'var(--gold)',marginTop:2,fontStyle:'italic'}}>📝 {p.commishNote}</div>}
               </div>
               <div className="pick-odds" style={{color: p.odds > 0 ? 'var(--green)' : 'var(--text)'}}>{formatOdds(p.odds)}</div>
               {!locked && (
@@ -939,6 +940,7 @@ function WeeklyTab({ data, weekData }) {
                 <div className="pick-player">{p.player}</div>
                 <div className="pick-detail">{p.game} • {p.betType}</div>
                 <div className="pick-detail" style={{color:'var(--text)', fontWeight:600}}>{p.pickText} ({formatOdds(p.odds)})</div>
+                {p.commishNote && <div style={{fontSize:11,color:'var(--gold)',marginTop:2,fontStyle:'italic'}}>📝 {p.commishNote}</div>}
               </div>
               <span className={`pick-result ${p.result}`}>
                 {p.result === 'won' ? '✅ W' : p.result === 'lost' ? '❌ L' : '⏳'}
@@ -1225,6 +1227,10 @@ function AdminTab({ data, update }) {
   const [weekView, setWeekView] = useState(data.currentWeek);
   const [payoutInput, setPayoutInput] = useState('');
   const [msg, setMsg] = useState('');
+  const [editPickIdx, setEditPickIdx] = useState(null);
+  const [editPickText, setEditPickText] = useState('');
+  const [editOdds, setEditOdds] = useState('');
+  const [editNote, setEditNote] = useState('');
 
   if (!authed) {
     return (
@@ -1303,22 +1309,63 @@ function AdminTab({ data, update }) {
           </div>
         ) : (
           weekPicks.map((p, i) => (
-            <div className="pick-card" key={i} style={{flexWrap:'wrap'}}>
-              <div className="pick-avatar" style={{background: AVATAR_COLORS[data.players.indexOf(p.player) % AVATAR_COLORS.length] + '30', color: AVATAR_COLORS[data.players.indexOf(p.player) % AVATAR_COLORS.length], width:32,height:32,fontSize:12}}>
-                {getInitials(p.player)}
+            <div key={i} style={{marginBottom:8}}>
+              <div className="pick-card" style={{flexWrap:'wrap',marginBottom:0}}>
+                <div className="pick-avatar" style={{background: AVATAR_COLORS[data.players.indexOf(p.player) % AVATAR_COLORS.length] + '30', color: AVATAR_COLORS[data.players.indexOf(p.player) % AVATAR_COLORS.length], width:32,height:32,fontSize:12}}>
+                  {getInitials(p.player)}
+                </div>
+                <div className="pick-info" style={{minWidth:0}}>
+                  <div className="pick-player" style={{fontSize:13}}>{p.player}</div>
+                  <div className="pick-detail">{p.game} • {p.pickText} ({formatOdds(p.odds)})</div>
+                  {p.commishNote && <div style={{fontSize:11,color:'var(--gold)',marginTop:2,fontStyle:'italic'}}>📝 {p.commishNote}</div>}
+                </div>
+                <div style={{display:'flex',gap:4,flexShrink:0,alignItems:'center'}}>
+                  <button className="btn btn-small" style={{background:'var(--blue-dim)',color:'var(--blue)',padding:'4px 8px',fontSize:11}} onClick={() => {
+                    if (editPickIdx === i) { setEditPickIdx(null); }
+                    else { setEditPickIdx(i); setEditPickText(p.pickText); setEditOdds(String(p.odds)); setEditNote(p.commishNote || ''); }
+                  }}>✏️</button>
+                  <button className={`btn btn-small ${p.result === 'won' ? 'btn-green' : ''}`} style={p.result !== 'won' ? {background:'var(--green-dim)',color:'var(--green)'} : {}} onClick={() => {
+                    update(d => { d.weeks[weekView].picks[i].result = p.result === 'won' ? 'pending' : 'won'; });
+                  }}>W</button>
+                  <button className={`btn btn-small ${p.result === 'lost' ? 'btn-red' : ''}`} style={p.result !== 'lost' ? {background:'var(--red-dim)',color:'var(--red)'} : {}} onClick={() => {
+                    update(d => { d.weeks[weekView].picks[i].result = p.result === 'lost' ? 'pending' : 'lost'; });
+                  }}>L</button>
+                </div>
               </div>
-              <div className="pick-info" style={{minWidth:0}}>
-                <div className="pick-player" style={{fontSize:13}}>{p.player}</div>
-                <div className="pick-detail">{p.pickText} ({formatOdds(p.odds)})</div>
-              </div>
-              <div style={{display:'flex',gap:4,flexShrink:0}}>
-                <button className={`btn btn-small ${p.result === 'won' ? 'btn-green' : ''}`} style={p.result !== 'won' ? {background:'var(--green-dim)',color:'var(--green)'} : {}} onClick={() => {
-                  update(d => { d.weeks[weekView].picks[i].result = p.result === 'won' ? 'pending' : 'won'; });
-                }}>W</button>
-                <button className={`btn btn-small ${p.result === 'lost' ? 'btn-red' : ''}`} style={p.result !== 'lost' ? {background:'var(--red-dim)',color:'var(--red)'} : {}} onClick={() => {
-                  update(d => { d.weeks[weekView].picks[i].result = p.result === 'lost' ? 'pending' : 'lost'; });
-                }}>L</button>
-              </div>
+              {editPickIdx === i && (
+                <div style={{background:'var(--surface)',border:'1px solid var(--blue)',borderRadius:'0 0 10px 10px',padding:12}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--blue)',marginBottom:8,textTransform:'uppercase',letterSpacing:1}}>Edit Pick — {p.player}</div>
+                  <div className="form-group" style={{marginBottom:8}}>
+                    <label className="form-label">Pick</label>
+                    <input type="text" value={editPickText} onChange={e => setEditPickText(e.target.value)} style={{padding:8,fontSize:13}} />
+                  </div>
+                  <div className="form-group" style={{marginBottom:8}}>
+                    <label className="form-label">Odds</label>
+                    <input type="text" value={editOdds} onChange={e => setEditOdds(e.target.value)} style={{padding:8,fontSize:13}} />
+                  </div>
+                  <div className="form-group" style={{marginBottom:8}}>
+                    <label className="form-label">Commish Note (visible to all)</label>
+                    <input type="text" value={editNote} onChange={e => setEditNote(e.target.value)} placeholder="e.g., Odds moved from -110 to -130 at book" style={{padding:8,fontSize:13}} />
+                  </div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button className="btn btn-gold btn-small" onClick={() => {
+                      const parsedOdds = parseInt(editOdds);
+                      if (isNaN(parsedOdds) || parsedOdds === 0 || (parsedOdds > -100 && parsedOdds < 100)) {
+                        setMsg('Invalid odds'); setTimeout(() => setMsg(''), 2000); return;
+                      }
+                      update(d => {
+                        const pick = d.weeks[weekView].picks[i];
+                        pick.pickText = editPickText.trim();
+                        pick.odds = parsedOdds;
+                        pick.commishNote = editNote.trim() || undefined;
+                      });
+                      setEditPickIdx(null);
+                      setMsg('Pick updated!'); setTimeout(() => setMsg(''), 2000);
+                    }}>Save Changes</button>
+                    <button className="btn btn-small" style={{background:'var(--surface2)',color:'var(--text2)'}} onClick={() => setEditPickIdx(null)}>Cancel</button>
+                  </div>
+                </div>
+              )}
             </div>
           ))
         )}
