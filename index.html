@@ -978,6 +978,9 @@ function WeeklyTab({ data, weekData }) {
 }
 
 // ─── DASHBOARD TAB ────────────────────────────────────────────
+const TOTAL_WEEKS = 17; // Week 2 through Week 18
+const COST_PER_PERSON = 85; // 17 weeks × $5
+
 function DashboardTab({ data }) {
   const numPlayers = data.players.length;
   const weeksPlayed = Object.keys(data.weeks).filter(w => {
@@ -993,13 +996,30 @@ function DashboardTab({ data }) {
     return wd.picks.every(p => p.result === 'won');
   }).length;
 
+  const weeksLeft = Math.max(0, 18 - data.currentWeek + 1);
+  const weeksCompleted = TOTAL_WEEKS - weeksLeft;
+  const seasonPot = totalWon; // all winnings pooled
+  const perPersonSplit = numPlayers > 0 ? (seasonPot / numPlayers) : 0;
+
   return (
     <div>
+      {/* Rules card */}
+      <div className="card" style={{borderColor:'var(--gold)',background:'linear-gradient(135deg, var(--surface) 0%, #1a234080 100%)'}}>
+        <div className="card-title">📜 Season Rules</div>
+        <div style={{fontSize:13,color:'var(--text2)',lineHeight:1.6}}>
+          <div style={{marginBottom:6}}><strong style={{color:'var(--text)'}}>Buy-in:</strong> $5/week × 17 weeks = <strong style={{color:'var(--gold)'}}>$85/person</strong></div>
+          <div style={{marginBottom:6}}><strong style={{color:'var(--text)'}}>Season:</strong> Week 2 – Week 18</div>
+          <div style={{marginBottom:6}}><strong style={{color:'var(--text)'}}>Weekly pot:</strong> ${numPlayers * data.buyIn} ({numPlayers} guys × $5) → group parlay</div>
+          <div style={{marginBottom:6}}><strong style={{color:'var(--green)'}}>End of season:</strong> All parlay winnings split equally ({numPlayers} ways)</div>
+          <div><strong style={{color:'var(--red)'}}>Last place penalty:</strong> Last on leaderboard owes first place <strong style={{color:'var(--gold)'}}>$100</strong></div>
+        </div>
+      </div>
+
       <div className="card">
         <div className="card-title">💰 Season Pot</div>
         <div className="stat-row">
           <div className="stat-box">
-            <div className="stat-label">Total In</div>
+            <div className="stat-label">Total Bet</div>
             <div className="stat-value red">${totalIn}</div>
           </div>
           <div className="stat-box">
@@ -1014,15 +1034,29 @@ function DashboardTab({ data }) {
         <div className="stat-row">
           <div className="stat-box">
             <div className="stat-label">Parlays Hit</div>
-            <div className="stat-value gold">{parlaysHit}/{weeksPlayed.length}</div>
+            <div className="stat-value gold">{parlaysHit}/{weeksPlayed.length || 0}</div>
+          </div>
+          <div className="stat-box">
+            <div className="stat-label">Per Person Split</div>
+            <div className="stat-value green">${perPersonSplit.toFixed(2)}</div>
+          </div>
+          <div className="stat-box">
+            <div className="stat-label">Weeks Left</div>
+            <div className="stat-value blue">{weeksLeft}</div>
+          </div>
+        </div>
+        <div className="stat-row">
+          <div className="stat-box">
+            <div className="stat-label">Season Cost</div>
+            <div className="stat-value" style={{fontSize:16}}>$85/person</div>
+          </div>
+          <div className="stat-box">
+            <div className="stat-label">Total Season Pool</div>
+            <div className="stat-value gold">${numPlayers * COST_PER_PERSON}</div>
           </div>
           <div className="stat-box">
             <div className="stat-label">Hit Rate</div>
             <div className="stat-value gold">{weeksPlayed.length > 0 ? Math.round(parlaysHit/weeksPlayed.length*100) : 0}%</div>
-          </div>
-          <div className="stat-box">
-            <div className="stat-label">Weeks Left</div>
-            <div className="stat-value blue">{18 - data.currentWeek + 1}</div>
           </div>
         </div>
       </div>
@@ -1141,13 +1175,18 @@ function LeaderboardTab({ data }) {
 
       <div className="card">
         <div className="card-title">🏆 Leaderboard</div>
-        {playerStats.map((p, i) => (
-          <div className="lb-row" key={p.player}>
+        {playerStats.map((p, i) => {
+          const isFirst = i === 0 && p.total > 0;
+          const isLast = i === playerStats.length - 1 && p.total > 0 && playerStats.filter(x => x.total > 0).length > 1;
+          return (
+          <div className="lb-row" key={p.player} style={isFirst ? {background:'var(--green-dim)',borderRadius:8,padding:'10px 8px'} : isLast ? {background:'var(--red-dim)',borderRadius:8,padding:'10px 8px'} : {}}>
             <div className={`lb-rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'normal'}`}>
               {i + 1}
             </div>
             <div className="lb-name">
               {p.player}
+              {isFirst && <span className="badge-hot" style={{marginLeft:6,fontSize:10}}>+$100</span>}
+              {isLast && <span className="badge-cold" style={{marginLeft:6,fontSize:10}}>owes $100</span>}
               {p.currentStreak >= 3 && p.streakType === 'W' && <span className="badge-hot" style={{marginLeft:6,fontSize:10}}>🔥 {p.currentStreak}W</span>}
               {p.currentStreak >= 3 && p.streakType === 'L' && <span className="badge-cold" style={{marginLeft:6,fontSize:10}}>🧊 {p.currentStreak}L</span>}
             </div>
@@ -1156,7 +1195,11 @@ function LeaderboardTab({ data }) {
               {p.total > 0 ? `${Math.round(p.pct)}%` : '—'}
             </div>
           </div>
-        ))}
+          );
+        })}
+        <div style={{fontSize:11,color:'var(--text2)',textAlign:'center',marginTop:8,fontStyle:'italic'}}>
+          Last place owes first place $100 at end of season
+        </div>
       </div>
     </div>
   );
