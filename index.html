@@ -616,7 +616,7 @@ function loadData() {
   } catch(e) {}
   return {
     players: ['Matteo','Pronchik','Schwartz','Thurston','Herlihy','Marchi','Daley','Berry','Kirstein','Peck','Madrazo','Conte','Brooks','Hume'],
-    currentWeek: 3,
+    currentWeek: 2,
     buyIn: 5,
     weeks: {},      // { [weekNum]: { picks: [], result: null, payout: 0 } }
     adminPin: '1234',
@@ -687,6 +687,7 @@ function PicksTab({ data, update, weekData }) {
   const [odds, setOdds] = useState('-110');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [editingIdx, setEditingIdx] = useState(null);
 
   const locked = isLocked(data.currentWeek);
   const countdown = timeUntilDeadline(data.currentWeek);
@@ -710,7 +711,7 @@ function PicksTab({ data, update, weekData }) {
       return;
     }
 
-    if (alreadyPicked.includes(player)) {
+    if (editingIdx === null && alreadyPicked.includes(player)) {
       setError(`${player} already submitted a pick this week.`);
       return;
     }
@@ -726,7 +727,9 @@ function PicksTab({ data, update, weekData }) {
     const newKey = getConflictKey(newPick);
     const oppositeKey = getOppositeSide(newPick);
 
-    for (const existing of weekData.picks) {
+    for (let ei = 0; ei < weekData.picks.length; ei++) {
+      if (ei === editingIdx) continue; // skip the pick being edited
+      const existing = weekData.picks[ei];
       const existingKey = getConflictKey(existing);
       if (oppositeKey && existingKey === oppositeKey) {
         setError(`Conflicting pick — ${existing.player} already has "${existing.pickText}" (${existing.betType}). Choose a different bet.`);
@@ -738,14 +741,24 @@ function PicksTab({ data, update, weekData }) {
       if (!d.weeks[d.currentWeek]) {
         d.weeks[d.currentWeek] = { picks: [], result: null, payout: 0 };
       }
-      d.weeks[d.currentWeek].picks.push({
-        ...newPick,
-        result: 'pending', // pending | won | lost
-        submittedAt: new Date().toISOString(),
-      });
+      if (editingIdx !== null) {
+        // Replace existing pick
+        d.weeks[d.currentWeek].picks[editingIdx] = {
+          ...newPick,
+          result: 'pending',
+          submittedAt: new Date().toISOString(),
+        };
+      } else {
+        d.weeks[d.currentWeek].picks.push({
+          ...newPick,
+          result: 'pending',
+          submittedAt: new Date().toISOString(),
+        });
+      }
     });
 
-    setSuccess(`${player}'s pick locked in!`);
+    setSuccess(editingIdx !== null ? `${player}'s pick updated!` : `${player}'s pick locked in!`);
+    setEditingIdx(null);
     setPlayer('');
     setGame('');
     setPickText('');
@@ -782,6 +795,25 @@ function PicksTab({ data, update, weekData }) {
                 <div className="pick-detail" style={{color:'var(--text)', fontWeight:600}}>{p.pickText}</div>
               </div>
               <div className="pick-odds" style={{color: p.odds > 0 ? 'var(--green)' : 'var(--text)'}}>{formatOdds(p.odds)}</div>
+              {!locked && (
+                <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0}}>
+                  <button className="btn btn-small" style={{background:'var(--blue-dim)',color:'var(--blue)',padding:'4px 8px',fontSize:11}} onClick={() => {
+                    setPlayer(p.player);
+                    setGame(p.game);
+                    setBetType(p.betType);
+                    setPickText(p.pickText);
+                    setOdds(String(p.odds));
+                    setEditingIdx(i);
+                    setError('');
+                    setSuccess('');
+                  }}>✏️</button>
+                  <button className="btn btn-small" style={{background:'var(--red-dim)',color:'var(--red)',padding:'4px 8px',fontSize:11}} onClick={() => {
+                    if (confirm(`Delete ${p.player}'s pick?`)) {
+                      update(d => { d.weeks[d.currentWeek].picks.splice(i, 1); });
+                    }
+                  }}>🗑️</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -802,7 +834,7 @@ function PicksTab({ data, update, weekData }) {
       {/* Submit form */}
       {!locked && (
         <div className="card">
-          <div className="card-title">🎯 Submit Your Pick</div>
+          <div className="card-title">{editingIdx !== null ? '✏️ Edit Pick' : '🎯 Submit Your Pick'}</div>
 
           {error && <div className="error-banner">⚠️ {error}</div>}
           {success && <div className="success-banner">✅ {success}</div>}
@@ -812,7 +844,7 @@ function PicksTab({ data, update, weekData }) {
               <label className="form-label">Your Name</label>
               <select value={player} onChange={e => setPlayer(e.target.value)}>
                 <option value="">Select player...</option>
-                {data.players.filter(p => !alreadyPicked.includes(p)).map(p => (
+                {data.players.filter(p => !alreadyPicked.includes(p) || (editingIdx !== null && p === weekData.picks[editingIdx]?.player)).map(p => (
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
@@ -846,7 +878,12 @@ function PicksTab({ data, update, weekData }) {
                 placeholder="-110" />
             </div>
 
-            <button type="submit" className="btn btn-gold">🔒 Lock In Pick</button>
+            <button type="submit" className="btn btn-gold">{editingIdx !== null ? '✏️ Update Pick' : '🔒 Lock In Pick'}</button>
+            {editingIdx !== null && (
+              <button type="button" className="btn" style={{background:'var(--surface2)',color:'var(--text2)',marginTop:6}} onClick={() => {
+                setEditingIdx(null); setPlayer(''); setGame(''); setPickText(''); setOdds('-110'); setError('');
+              }}>Cancel Edit</button>
+            )}
           </form>
         </div>
       )}
