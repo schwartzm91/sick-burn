@@ -7,6 +7,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
@@ -638,39 +640,68 @@ function getOppositeSide(pick) {
   return null;
 }
 
-// ─── Data store (localStorage) ────────────────────────────────
-function loadData() {
-  try {
-    const raw = localStorage.getItem('parlay-tracker-data');
-    if (raw) return JSON.parse(raw);
-  } catch(e) {}
-  return {
-    players: ['Matteo','Pronchik','Schwartz','Thurston','Herlihy','Marchi','Daley','Berry','Kirstein','Peck','Madrazo','Conte','Brooks','Hume'],
-    currentWeek: 2,
-    buyIn: 5,
-    weeks: {},      // { [weekNum]: { picks: [], result: null, payout: 0 } }
-    paidPlayers: ['Herlihy','Kirstein','Schwartz'], // who has paid their $85
-    adminPin: '1234',
-  };
-}
+// ─── Firebase setup ───────────────────────────────────────────
+const firebaseConfig = {
+  databaseURL: 'https://sick-burn-default-rtdb.firebaseio.com',
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const dataRef = db.ref('appData');
+
+const DEFAULT_DATA = {
+  players: ['Matteo','Pronchik','Schwartz','Thurston','Herlihy','Marchi','Daley','Berry','Kirstein','Peck','Madrazo','Conte','Brooks','Hume'],
+  currentWeek: 2,
+  buyIn: 5,
+  weeks: {},
+  paidPlayers: ['Herlihy','Kirstein','Schwartz'],
+  adminPin: '1234',
+};
 
 function saveData(data) {
-  try { localStorage.setItem('parlay-tracker-data', JSON.stringify(data)); } catch(e) {}
+  dataRef.set(data);
 }
 
 // ─── Main App ─────────────────────────────────────────────────
 function App() {
-  const [data, setData] = useState(loadData);
+  const [data, setData] = useState(null);
   const [tab, setTab] = useState('picks');
+  const [loading, setLoading] = useState(true);
+
+  // Listen to Firebase for real-time updates
+  useEffect(() => {
+    const unsubscribe = dataRef.on('value', (snapshot) => {
+      const val = snapshot.val();
+      if (val) {
+        // Ensure weeks and paidPlayers are always objects/arrays
+        setData({ ...DEFAULT_DATA, ...val, weeks: val.weeks || {}, paidPlayers: val.paidPlayers || [] });
+      } else {
+        // First time — seed the database with defaults
+        dataRef.set(DEFAULT_DATA);
+        setData(DEFAULT_DATA);
+      }
+      setLoading(false);
+    });
+    return () => dataRef.off('value', unsubscribe);
+  }, []);
 
   const update = useCallback((fn) => {
     setData(prev => {
-      const next = { ...prev };
+      const next = JSON.parse(JSON.stringify(prev)); // deep clone
       fn(next);
       saveData(next);
       return next;
     });
   }, []);
+
+  if (loading || !data) {
+    return (
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',flexDirection:'column'}}>
+        <div style={{fontSize:36,marginBottom:12}}>🔥</div>
+        <div style={{fontSize:18,fontWeight:700,color:'var(--gold)'}}>SICK BURN</div>
+        <div style={{fontSize:13,color:'var(--text2)',marginTop:4}}>Loading...</div>
+      </div>
+    );
+  }
 
   const weekData = data.weeks[data.currentWeek] || { picks: [], result: null, payout: 0 };
 
