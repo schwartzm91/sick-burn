@@ -842,6 +842,17 @@ function PicksTab({ data, update, weekData }) {
         </div>
       )}
 
+      {/* Live parlay odds */}
+      {weekData.picks.length > 0 && (
+        <div className="parlay-box">
+          <div className="parlay-label">{weekData.picks.length}-Leg Parlay{weekData.picks.length < data.players.length ? ` (${data.players.length - weekData.picks.length} picks remaining)` : ' — FULL'}</div>
+          <div className="parlay-odds">{formatOdds(combinedParlayOdds(weekData.picks))}</div>
+          <div className="parlay-payout">
+            ${data.players.length * data.buyIn} bet → ${(data.players.length * data.buyIn * parlayDecimal(weekData.picks)).toFixed(2)} potential payout
+          </div>
+        </div>
+      )}
+
       {/* Live picks */}
       {weekData.picks.length > 0 && (
         <div className="card">
