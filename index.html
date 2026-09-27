@@ -658,7 +658,9 @@ const DEFAULT_DATA = {
 };
 
 function saveData(data) {
-  dataRef.set(data);
+  // Firebase rejects undefined values — strip them before saving
+  const clean = JSON.parse(JSON.stringify(data));
+  dataRef.set(clean);
 }
 
 // ─── Main App ─────────────────────────────────────────────────
@@ -1546,7 +1548,8 @@ function AdminTab({ data, update }) {
                         const pick = d.weeks[weekView].picks[i];
                         pick.pickText = editPickText.trim();
                         pick.odds = parsedOdds;
-                        pick.commishNote = editNote.trim() || undefined;
+                        if (editNote.trim()) { pick.commishNote = editNote.trim(); }
+                        else { delete pick.commishNote; }
                       });
                       setEditPickIdx(null);
                       setMsg('Pick updated!'); setTimeout(() => setMsg(''), 2000);
