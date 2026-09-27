@@ -1297,6 +1297,82 @@ function LeaderboardTab({ data }) {
   );
 }
 
+// ─── ADMIN ADD PICK ───────────────────────────────────────────
+function AdminAddPick({ data, update, weekView, setMsg }) {
+  const [player, setPlayer] = useState('');
+  const [game, setGame] = useState('');
+  const [betType, setBetType] = useState('spread');
+  const [pickText, setPickText] = useState('');
+  const [odds, setOdds] = useState('-110');
+  const [error, setError] = useState('');
+
+  const weekData = data.weeks[weekView] || { picks: [] };
+  const alreadyPicked = (weekData.picks || []).map(p => p.player);
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    if (!player || !game || !pickText.trim() || !odds) { setError('Fill in all fields.'); return; }
+    if (alreadyPicked.includes(player)) { setError(`${player} already has a pick this week.`); return; }
+    const parsedOdds = parseInt(odds);
+    if (isNaN(parsedOdds) || parsedOdds === 0 || (parsedOdds > -100 && parsedOdds < 100)) {
+      setError('Enter valid American odds (e.g., -110, +150).'); return;
+    }
+    update(d => {
+      if (!d.weeks[weekView]) d.weeks[weekView] = { picks: [], result: null, payout: 0 };
+      d.weeks[weekView].picks.push({
+        player, game, betType, pickText: pickText.trim(), odds: parsedOdds,
+        result: 'pending', submittedAt: new Date().toISOString(), commishNote: 'Added by commish',
+      });
+    });
+    setMsg(`${player}'s pick added!`);
+    setPlayer(''); setGame(''); setPickText(''); setOdds('-110');
+    setTimeout(() => setMsg(''), 3000);
+  }
+
+  return (
+    <div className="card">
+      <div className="card-title">➕ Add Pick for Player — Week {weekView}</div>
+      {error && <div className="error-banner" style={{marginBottom:8}}>⚠️ {error}</div>}
+      <form onSubmit={handleSubmit}>
+        <div className="form-group">
+          <label className="form-label">Player</label>
+          <select value={player} onChange={e => setPlayer(e.target.value)}>
+            <option value="">Select player...</option>
+            {data.players.filter(p => !alreadyPicked.includes(p)).map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Game</label>
+          <input type="text" value={game} onChange={e => setGame(e.target.value)} placeholder="e.g., KC @ BUF" />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Bet Type</label>
+          <select value={betType} onChange={e => setBetType(e.target.value)}>
+            <option value="spread">Spread</option>
+            <option value="moneyline">Moneyline</option>
+            <option value="over/under">Over/Under</option>
+            <option value="player prop">Player Prop</option>
+          </select>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <div className="form-group" style={{flex:1}}>
+            <label className="form-label">Pick</label>
+            <input type="text" value={pickText} onChange={e => setPickText(e.target.value)} placeholder="e.g., TB +3.5" />
+          </div>
+          <div className="form-group" style={{width:100}}>
+            <label className="form-label">Odds</label>
+            <input type="text" value={odds} onChange={e => setOdds(e.target.value)} placeholder="-110" />
+          </div>
+        </div>
+        <button type="submit" className="btn btn-gold">➕ Add Pick</button>
+      </form>
+    </div>
+  );
+}
+
 // ─── ADMIN TAB ────────────────────────────────────────────────
 function AdminTab({ data, update }) {
   const [authed, setAuthed] = useState(false);
@@ -1400,6 +1476,9 @@ function AdminTab({ data, update }) {
           );
         })}
       </div>
+
+      {/* Add Pick on Behalf */}
+      <AdminAddPick data={data} update={update} weekView={weekView} setMsg={setMsg} />
 
       {/* Grade Picks */}
       <div className="card">
