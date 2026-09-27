@@ -845,15 +845,22 @@ function PicksTab({ data, update, weekData }) {
       )}
 
       {/* Live parlay odds */}
-      {weekData.picks.length > 0 && (
+      {weekData.picks.length > 0 && (() => {
+        const hasBookOdds = weekData.bookOdds && weekData.bookOdds !== 0;
+        const displayOdds = hasBookOdds ? weekData.bookOdds : combinedParlayOdds(weekData.picks);
+        const wager = weekData.picks.length * data.buyIn;
+        const payout = hasBookOdds ? (wager * americanToDecimal(weekData.bookOdds)) : (wager * parlayDecimal(weekData.picks));
+        return (
         <div className="parlay-box">
           <div className="parlay-label">{weekData.picks.length}-Leg Parlay{weekData.picks.length < data.players.length ? ` (${data.players.length - weekData.picks.length} picks remaining)` : ' — FULL'}</div>
-          <div className="parlay-odds">{formatOdds(combinedParlayOdds(weekData.picks))}</div>
+          <div className="parlay-odds">{formatOdds(displayOdds)}</div>
           <div className="parlay-payout">
-            ${weekData.picks.length * data.buyIn} bet → ${(weekData.picks.length * data.buyIn * parlayDecimal(weekData.picks)).toFixed(2)} potential payout
+            ${wager} bet → ${payout.toFixed(2)} potential payout
           </div>
+          {hasBookOdds && <div style={{fontSize:10,color:'var(--text2)',marginTop:4}}>DraftKings book odds</div>}
         </div>
-      )}
+        );
+      })()}
 
       {/* Live picks */}
       {weekData.picks.length > 0 && (
@@ -984,24 +991,30 @@ function WeeklyTab({ data, weekData }) {
   return (
     <div>
       {/* Parlay summary */}
-      {picks.length > 0 && (
+      {picks.length > 0 && (() => {
+        const hasBookOdds = weekData.bookOdds && weekData.bookOdds !== 0;
+        const displayOdds = hasBookOdds ? weekData.bookOdds : combinedParlayOdds(picks);
+        const payout = hasBookOdds ? (weeklyPot * americanToDecimal(weekData.bookOdds)) : (weeklyPot * parlayDecimal(picks));
+        return (
         <div className="parlay-box">
           <div className="parlay-label">{picks.length}-Leg Group Parlay</div>
-          <div className="parlay-odds">{formatOdds(combinedParlayOdds(picks))}</div>
+          <div className="parlay-odds">{formatOdds(displayOdds)}</div>
           <div className="parlay-payout">
-            ${weeklyPot} bet → ${(weeklyPot * parlayDecimal(picks)).toFixed(2)} potential payout
+            ${weeklyPot} bet → ${payout.toFixed(2)} potential payout
           </div>
+          {hasBookOdds && <div style={{fontSize:10,color:'var(--text2)',marginTop:2}}>DraftKings book odds</div>}
           {allDecided && (
             <div style={{marginTop:8}}>
               {parlayHit ? (
-                <span className="badge-hot" style={{fontSize:14,padding:'6px 16px'}}>💰 PARLAY HIT! +${(weekData.payout || (weeklyPot * parlayDecimal(picks))).toFixed(2)}</span>
+                <span className="badge-hot" style={{fontSize:14,padding:'6px 16px'}}>💰 PARLAY HIT! +${(weekData.payout || payout).toFixed(2)}</span>
               ) : (
                 <span className="badge-cold" style={{fontSize:14,padding:'6px 16px'}}>❌ PARLAY BUSTED</span>
               )}
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       <div className="card">
         <div className="card-title">📋 Week {data.currentWeek} Picks</div>
@@ -1382,6 +1395,7 @@ function AdminTab({ data, update }) {
   const [editNames, setEditNames] = useState([...data.players]);
   const [weekView, setWeekView] = useState(data.currentWeek);
   const [payoutInput, setPayoutInput] = useState('');
+  const [bookOddsInput, setBookOddsInput] = useState('');
   const [msg, setMsg] = useState('');
   const [editPickIdx, setEditPickIdx] = useState(null);
   const [editPickText, setEditPickText] = useState('');
@@ -1564,18 +1578,28 @@ function AdminTab({ data, update }) {
 
         {weekPicks.length > 0 && (
           <div style={{marginTop:12}}>
-            <div className="form-group">
-              <label className="form-label">Parlay Payout ($)</label>
-              <input type="number" value={payoutInput} onChange={e => setPayoutInput(e.target.value)} placeholder="0.00" />
+            <div style={{display:'flex',gap:8}}>
+              <div className="form-group" style={{flex:1}}>
+                <label className="form-label">Book Parlay Odds</label>
+                <input type="text" value={bookOddsInput} onChange={e => setBookOddsInput(e.target.value)} placeholder="e.g., +12461" />
+              </div>
+              <div className="form-group" style={{flex:1}}>
+                <label className="form-label">Parlay Payout ($)</label>
+                <input type="number" value={payoutInput} onChange={e => setPayoutInput(e.target.value)} placeholder="0.00" />
+              </div>
             </div>
             <button className="btn btn-gold btn-small" onClick={() => {
+              const parsedBookOdds = parseInt(bookOddsInput);
               update(d => {
                 if (!d.weeks[weekView]) d.weeks[weekView] = { picks: [], result: null, payout: 0 };
                 d.weeks[weekView].payout = parseFloat(payoutInput) || 0;
+                if (!isNaN(parsedBookOdds) && parsedBookOdds !== 0) {
+                  d.weeks[weekView].bookOdds = parsedBookOdds;
+                }
               });
-              setMsg('Payout saved!');
+              setMsg('Saved!');
               setTimeout(() => setMsg(''), 2000);
-            }}>Save Payout</button>
+            }}>Save</button>
           </div>
         )}
       </div>
