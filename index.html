@@ -294,6 +294,7 @@
 
   .pick-result.won { background: var(--green-dim); color: var(--green); }
   .pick-result.lost { background: var(--red-dim); color: var(--red); }
+  .pick-result.push { background: var(--gold-dim); color: var(--gold); }
   .pick-result.pending { background: var(--gold-dim); color: var(--gold); }
 
   /* Missing players */
@@ -984,7 +985,7 @@ function WeeklyTab({ data, weekData }) {
   const picks = weekData.picks || [];
   const hasResults = picks.some(p => p.result !== 'pending');
   const allDecided = picks.length > 0 && picks.every(p => p.result !== 'pending');
-  const parlayHit = allDecided && picks.every(p => p.result === 'won');
+  const parlayHit = allDecided && picks.every(p => p.result === 'won' || p.result === 'push');
   const numPlayers = data.players.length;
   const weeklyPot = numPlayers * data.buyIn;
 
@@ -1036,7 +1037,7 @@ function WeeklyTab({ data, weekData }) {
                 {p.commishNote && <div style={{fontSize:11,color:'var(--gold)',marginTop:2,fontStyle:'italic'}}>📝 {p.commishNote}</div>}
               </div>
               <span className={`pick-result ${p.result}`}>
-                {p.result === 'won' ? '✅ W' : p.result === 'lost' ? '❌ L' : '⏳'}
+                {p.result === 'won' ? '✅ W' : p.result === 'lost' ? '❌ L' : p.result === 'push' ? '🟰 P' : '⏳'}
               </span>
             </div>
           ))
@@ -1088,7 +1089,7 @@ function DashboardTab({ data }) {
   const netPL = totalWon - totalIn;
   const parlaysHit = weeksPlayed.filter(w => {
     const wd = data.weeks[w];
-    return wd.picks.every(p => p.result === 'won');
+    return wd.picks.every(p => p.result === 'won' || p.result === 'push');
   }).length;
 
   const weeksLeft = Math.max(0, 18 - data.currentWeek + 1);
@@ -1163,15 +1164,16 @@ function DashboardTab({ data }) {
           const picks = wd.picks || [];
           if (picks.length === 0) return null;
           const allDone = picks.every(p => p.result !== 'pending');
-          const hit = allDone && picks.every(p => p.result === 'won');
+          const hit = allDone && picks.every(p => p.result === 'won' || p.result === 'push');
           const wins = picks.filter(p => p.result === 'won').length;
           const losses = picks.filter(p => p.result === 'lost').length;
+          const pushes = picks.filter(p => p.result === 'push').length;
           return (
             <div className="week-row" key={w}>
               <div className="week-num">WK {w}</div>
               <div className="week-odds">
                 <div>{formatOdds(combinedParlayOdds(picks))}</div>
-                <div style={{fontSize:11,color:'var(--text2)'}}>{picks.length} legs • {wins}W-{losses}L</div>
+                <div style={{fontSize:11,color:'var(--text2)'}}>{picks.length} legs • {wins}W-{losses}L{pushes > 0 ? `-${pushes}P` : ''}</div>
               </div>
               {allDone ? (
                 <span className={`week-result ${hit ? 'pick-result won' : 'pick-result lost'}`}>
@@ -1200,34 +1202,40 @@ function LeaderboardTab({ data }) {
 
   const playerStats = data.players.map(player => {
     let wins = 0, losses = 0, totalWagered = 0, totalReturned = 0;
-    let currentStreak = 0, streak = 0, streakType = '';
-    let bestHit = 0; // biggest single-pick payout
+    let pushes = 0, currentStreak = 0, streak = 0, streakType = '';
+    let bestHit = 0;
 
     Object.keys(data.weeks).sort((a,b) => a - b).forEach(w => {
       const pick = (data.weeks[w].picks || []).find(p => p.player === player);
       if (pick && pick.result !== 'pending') {
-        totalWagered += BET_SIZE;
-        if (pick.result === 'won') {
-          wins++;
-          const payout = BET_SIZE * americanToDecimal(pick.odds);
-          totalReturned += payout;
-          bestHit = Math.max(bestHit, payout);
-          if (streakType === 'W') { streak++; }
-          else { streak = 1; streakType = 'W'; }
+        if (pick.result === 'push') {
+          pushes++;
+          // Push = money back, no profit no loss, doesn't affect streak
+          totalWagered += BET_SIZE;
+          totalReturned += BET_SIZE;
         } else {
-          losses++;
-          // $0 returned on a loss
-          if (streakType === 'L') { streak++; }
-          else { streak = 1; streakType = 'L'; }
+          totalWagered += BET_SIZE;
+          if (pick.result === 'won') {
+            wins++;
+            const payout = BET_SIZE * americanToDecimal(pick.odds);
+            totalReturned += payout;
+            bestHit = Math.max(bestHit, payout);
+            if (streakType === 'W') { streak++; }
+            else { streak = 1; streakType = 'W'; }
+          } else {
+            losses++;
+            if (streakType === 'L') { streak++; }
+            else { streak = 1; streakType = 'L'; }
+          }
+          currentStreak = streak;
         }
-        currentStreak = streak;
       }
     });
 
-    const total = wins + losses;
+    const total = wins + losses + pushes;
     const profit = totalReturned - totalWagered;
     const roi = totalWagered > 0 ? (profit / totalWagered * 100) : 0;
-    return { player, wins, losses, total, totalWagered, totalReturned, profit, roi, bestHit, currentStreak, streakType };
+    return { player, wins, losses, pushes, total, totalWagered, totalReturned, profit, roi, bestHit, currentStreak, streakType };
   });
 
   // Sort by profit (total earnings), then by ROI as tiebreaker
@@ -1293,7 +1301,7 @@ function LeaderboardTab({ data }) {
                 {p.currentStreak >= 3 && p.streakType === 'W' && <span className="badge-hot" style={{marginLeft:6,fontSize:10}}>🔥 {p.currentStreak}W</span>}
                 {p.currentStreak >= 3 && p.streakType === 'L' && <span className="badge-cold" style={{marginLeft:6,fontSize:10}}>🧊 {p.currentStreak}L</span>}
               </div>
-              <div style={{fontSize:11,color:'var(--text2)'}}>{p.wins}-{p.losses} • ${p.totalWagered} bet → ${p.totalReturned.toFixed(2)} back</div>
+              <div style={{fontSize:11,color:'var(--text2)'}}>{p.wins}-{p.losses}{p.pushes > 0 ? `-${p.pushes}P` : ''} • ${p.totalWagered} bet → ${p.totalReturned.toFixed(2)} back</div>
             </div>
             <div style={{textAlign:'right',flexShrink:0}}>
               <div className={`lb-pct ${p.profit > 0 ? 'green' : p.profit < 0 && p.total > 0 ? 'red' : ''}`} style={{color: p.total === 0 ? 'var(--text2)' : undefined, width:'auto'}}>
@@ -1535,6 +1543,9 @@ function AdminTab({ data, update }) {
                   <button className={`btn btn-small ${p.result === 'lost' ? 'btn-red' : ''}`} style={p.result !== 'lost' ? {background:'var(--red-dim)',color:'var(--red)'} : {}} onClick={() => {
                     update(d => { d.weeks[weekView].picks[i].result = p.result === 'lost' ? 'pending' : 'lost'; });
                   }}>L</button>
+                  <button className={`btn btn-small ${p.result === 'push' ? '' : ''}`} style={{background: p.result === 'push' ? 'var(--gold)' : 'var(--gold-dim)', color: p.result === 'push' ? '#000' : 'var(--gold)', padding:'4px 8px',fontSize:11}} onClick={() => {
+                    update(d => { d.weeks[weekView].picks[i].result = p.result === 'push' ? 'pending' : 'push'; });
+                  }}>P</button>
                 </div>
               </div>
               {editPickIdx === i && (
